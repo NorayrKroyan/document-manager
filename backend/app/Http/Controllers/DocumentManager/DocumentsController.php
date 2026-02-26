@@ -19,17 +19,16 @@ class DocumentsController extends Controller
 {
     public function list(Request $request, DocumentsQuery $q): JsonResponse
     {
-        $limit  = (int)$request->query('limit', 50);
-        $page   = (int)$request->query('page', 1);
-        $search = (string)$request->query('q', '');
+        $limit  = (int) $request->query('limit', 50);
+        $page   = (int) $request->query('page', 1);
+        $search = (string) $request->query('q', '');
+        $status = (string) $request->query('status', 'active'); // active|deleted|all
 
         $limit = max(1, min(200, $limit));
         $page  = max(1, $page);
 
-        $res = $q->list($search, $limit, $page);
+        $res = $q->list($search, $limit, $page, $status);
 
-        // If your query already returns file_url, keep it.
-        // If it only returns "path" like "storage/...", front-end can use "/"+path.
         return response()->json([
             'ok'    => true,
             'rows'  => $res['rows'],
@@ -56,7 +55,7 @@ class DocumentsController extends Controller
         ]);
     }
 
-    // Remote owner search: contacts + vehicles
+    // Existing owners() unchanged (if you still use it)
     public function owners(Request $request): JsonResponse
     {
         $ownerTypeId = (int)$request->query('owner_type_id', 0);
@@ -148,13 +147,11 @@ class DocumentsController extends Controller
         $ext  = strtolower($f->getClientOriginalExtension() ?: 'bin');
         $name = 'file_' . Str::random(16) . '.' . $ext;
 
-        // storage/app/public/document-manager/yy/mm/file_xxx.ext
         $sub = date('y/m');
         $diskRelPath = "document-manager/{$sub}/{$name}";
 
         Storage::disk('public')->putFileAs("document-manager/{$sub}", $f, $name);
 
-        // DB path format matches your existing "storage/...." style
         $dbPath = 'storage/' . $diskRelPath;
 
         $doc = new Document();
@@ -178,6 +175,7 @@ class DocumentsController extends Controller
 
     public function update(int $id, UpdateDocumentRequest $request): JsonResponse
     {
+        // allow update only for active docs (typical)
         $doc = Document::query()->where('id_document', $id)->where('is_deleted', 0)->first();
         if (!$doc) {
             return response()->json(['ok' => false, 'message' => 'Not found'], 404);
@@ -195,10 +193,9 @@ class DocumentsController extends Controller
         $doc->date_modified   = $now;
 
         if ($request->hasFile('file')) {
-            // delete old file if it was ours (storage/...)
             $oldPath = (string)($doc->path ?? '');
             if ($oldPath !== '' && str_starts_with($oldPath, 'storage/')) {
-                $oldDiskPath = substr($oldPath, strlen('storage/')); // remove prefix
+                $oldDiskPath = substr($oldPath, strlen('storage/'));
                 if ($oldDiskPath && Storage::disk('public')->exists($oldDiskPath)) {
                     Storage::disk('public')->delete($oldDiskPath);
                 }
@@ -230,6 +227,18 @@ class DocumentsController extends Controller
         if (!$doc) return response()->json(['ok' => true]);
 
         $doc->is_deleted = 1;
+        $doc->date_modified = time();
+        $doc->save();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function restore(int $id): JsonResponse
+    {
+        $doc = Document::query()->where('id_document', $id)->where('is_deleted', 1)->first();
+        if (!$doc) return response()->json(['ok' => false, 'message' => 'Not found'], 404);
+
+        $doc->is_deleted = 0;
         $doc->date_modified = time();
         $doc->save();
 

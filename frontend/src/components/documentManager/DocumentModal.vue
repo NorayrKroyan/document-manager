@@ -84,7 +84,13 @@
             />
           </RowField>
 
-          <RowField label="Expiration:" :err="errors?.doc_expiration" v-slot="{ hasError }">
+          <!-- ✅ Expiration shows ONLY when doctype.require_expire == 1 -->
+          <RowField
+              v-if="showExpiration"
+              label="Expiration:"
+              :err="errors?.doc_expiration"
+              v-slot="{ hasError }"
+          >
             <div class="cd-input">
               <input
                   v-model="form.doc_expiration"
@@ -134,7 +140,6 @@
           </div>
 
           <div class="w-full rounded-xl bg-white p-2">
-            <!-- ✅ viewer resizable; modal stretches; NO viewer scroll -->
             <div
                 ref="viewerEl"
                 class="w-full rounded-lg border bg-white overflow-hidden"
@@ -214,6 +219,38 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'save', 'delete'])
+
+/**
+ * ✅ Doctype -> require_expire logic
+ * lookups.doctypes rows look like:
+ * { id, name, type_extension, require_expire }
+ */
+const selectedDoctype = computed(() => {
+  const id = Number(props.form?.id_doctype || 0)
+  if (!id) return null
+  const list = props.lookups?.doctypes || []
+  return list.find(d => Number(d?.id) === id) || null
+})
+
+const showExpiration = computed(() => {
+  return Number(selectedDoctype.value?.require_expire || 0) === 1
+})
+
+// If type does NOT require expiration -> clear value + clear expiration error
+watch(
+    () => [props.form?.id_doctype, props.lookups?.doctypes],
+    () => {
+      if (!props.open) return
+      if (!showExpiration.value) {
+        if (props.form) props.form.doc_expiration = ''
+        if (props.errors && props.errors.doc_expiration) {
+          // do not mutate props.errors object if parent owns it; harmless to ignore
+          // parent will revalidate on save anyway
+        }
+      }
+    },
+    { deep: false }
+)
 
 // owners search (unchanged)
 const ownersLoading = ref(false)
@@ -368,7 +405,7 @@ const currentFileName = computed(() => {
   return parts[parts.length - 1] || ''
 })
 
-// ✅ yesterday-style resize sync (viewer -> modal)
+// resize sync (viewer -> modal)
 const modalRef = ref(null)
 const viewerEl = ref(null)
 

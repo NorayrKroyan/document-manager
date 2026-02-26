@@ -1,3 +1,4 @@
+// resources/js/composables/useDocumentManagerPage.js
 import { ref, computed } from 'vue'
 import { dmLookups, dmDocumentsList } from '@/api/document-manager'
 
@@ -6,6 +7,7 @@ export function useDocumentManagerPage() {
     const err = ref('')
 
     const q = ref('')
+    const status = ref('active')
     const list = ref([])
 
     const page = ref(1)
@@ -38,12 +40,21 @@ export function useDocumentManagerPage() {
         loading.value = true
         err.value = ''
         try {
-            const r = await dmDocumentsList({ q: q.value, page: page.value, limit: limit.value })
-            if (!r?.ok) throw new Error('List failed')
+            const r = await dmDocumentsList({
+                q: q.value || '',
+                page: page.value || 1,
+                limit: limit.value || 50,
+                status: status.value || 'active',
+            })
+
+            if (!r?.ok) throw new Error(r?.message || 'List failed')
+
             list.value = r.rows || []
             total.value = Number(r.total || 0)
         } catch (e) {
             err.value = e?.message || 'Failed to load'
+            list.value = []
+            total.value = 0
         } finally {
             loading.value = false
         }
@@ -56,7 +67,7 @@ export function useDocumentManagerPage() {
 
     return {
         loading, err,
-        q, list,
+        q, status, list,
         page, limit, total, totalPages, canNext,
         lookups,
         boot, reloadList,

@@ -11,6 +11,8 @@ Route::prefix('document-manager')->group(function () {
     Route::get('documents', [DocumentsController::class, 'list']);
     Route::get('lookups', [DocumentsController::class, 'lookups']);
 
+    Route::post('/documents/{id}/restore', [DocumentsController::class, 'restore']);
+
     // ✅ ONLY ONE endpoint for owner search
     Route::get('owners/search', [OwnersController::class, 'search'])->name('dm.owners.search');
 
